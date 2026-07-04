@@ -1,0 +1,14 @@
+name: gitmc
+version: ${version}
+main: com.gitmc.GitmcPlugin
+api-version: '26.2'
+description: Pull a git repo (datapack or resource pack) from in game and reload.
+author: Polysquarazoid
+commands:
+  git:
+    description: Sync a git repo and reload.
+    usage: /git <pull|version|help>
+permissions:
+  gitmc.use:
+    description: Allows use of /git.
+    default: op

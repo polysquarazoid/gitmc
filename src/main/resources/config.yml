@@ -1,0 +1,5 @@
+# Repo folder to pull. Absolute, or relative to the server folder.
+repository: ""
+
+# Seconds a player must wait between /git pull commands.
+cooldown-seconds: 10
