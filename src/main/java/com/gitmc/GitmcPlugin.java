@@ -22,14 +22,14 @@ public final class GitmcPlugin extends JavaPlugin {
 
     private static final String PREFIX = "[Git] ";
 
-    private static final TextColor INFO = TextColor.color(0xD29922); // GitHub attention
-    private static final TextColor SUCCESS = TextColor.color(0x3FB950); // GitHub success
-    private static final TextColor ERROR = TextColor.color(0xF85149); // GitHub danger
+    private static final TextColor INFO = TextColor.color(0xFFDD21);
+    private static final TextColor SUCCESS = TextColor.color(0x34E009);
+    private static final TextColor ERROR = TextColor.color(0xF85149);
     private static final TextColor TEXT = NamedTextColor.WHITE;
     private static final TextColor HASH = NamedTextColor.GRAY;
 
     private static final Pattern VALID_BRANCH = Pattern.compile("^[A-Za-z0-9._/][A-Za-z0-9._/-]*$");
-    private static final List<String> SUBCOMMANDS = List.of("pull", "version", "help");
+    private static final List<String> SUBCOMMANDS = List.of("pull", "branches", "version", "help");
     private static final int MAX_CHANGED_FILES = 10;
 
     private final Map<UUID, Long> lastPull = new ConcurrentHashMap<>();
@@ -86,6 +86,7 @@ public final class GitmcPlugin extends JavaPlugin {
 
         switch (args[0].toLowerCase(Locale.ROOT)) {
             case "pull" -> handlePull(sender, args);
+            case "branches" -> handleBranches(sender);
             case "version" -> handleVersion(sender, args);
             case "help" -> sendHelp(sender);
             default -> send(sender, "Unknown command, try /git help", ERROR);
@@ -97,7 +98,7 @@ public final class GitmcPlugin extends JavaPlugin {
         boolean silent = false;
         String branch = null;
         for (int i = 1; i < args.length; i++) {
-            if (args[i].equalsIgnoreCase("-silent")) {
+            if (args[i].equalsIgnoreCase("-silent") || args[i].equalsIgnoreCase("-s")) {
                 silent = true;
             } else if (branch == null) {
                 branch = args[i];
@@ -135,6 +136,12 @@ public final class GitmcPlugin extends JavaPlugin {
     }
 
     private void runPull(CommandSender sender, GitService git, String branch, boolean silent) {
+        // Record where we start before any checkout, so a branch switch counts
+        // as a change and its diff is included below.
+        String startBranch = git.currentBranch();
+        String oldHead = git.head();
+
+        boolean switched = false;
         if (branch != null) {
             if (!git.branchExists(branch)) {
                 sync(() -> send(sender, "Failed to find branch " + branch, ERROR));
@@ -146,11 +153,11 @@ public final class GitmcPlugin extends JavaPlugin {
                 sync(() -> send(sender, "Failed to switch to branch " + branch + ", see console", ERROR));
                 return;
             }
+            switched = !branch.equals(startBranch);
         }
 
         String current = git.currentBranch();
-        String oldHead = git.head();
-        if (!silent) {
+        if (!silent && !switched) {
             sync(() -> send(sender, "Pulling " + current, INFO));
         }
 
@@ -163,21 +170,30 @@ public final class GitmcPlugin extends JavaPlugin {
 
         String newHead = git.head();
         int commits = git.commitCount(oldHead, newHead);
-        if (commits == 0) {
+        List<String> files = git.changedFiles(oldHead, newHead);
+        boolean didSwitch = switched;
+        sync(() -> applyResult(sender, current, didSwitch, commits, files, silent));
+    }
+
+    // A plain pull with nothing new just reports it and skips the reload. A
+    // branch switch, or a pull that brought in commits, lists the changes and
+    // always reloads so the running server matches the working tree.
+    private void applyResult(CommandSender sender, String branch, boolean switched, int commits,
+            List<String> files, boolean silent) {
+        if (!switched && commits == 0) {
             if (!silent) {
-                sync(() -> send(sender, "Already up to date on branch " + current, INFO));
+                send(sender, "Already up to date on branch " + branch, INFO);
             }
             return;
         }
 
-        List<String> files = git.changedFiles(oldHead, newHead);
-        sync(() -> applyPull(current, commits, files, silent));
-    }
-
-    private void applyPull(String branch, int commits, List<String> files, boolean silent) {
         if (!silent) {
-            String plural = commits == 1 ? "" : "s";
-            broadcastToOps("Synced " + commits + " commit" + plural + " on branch " + branch, SUCCESS);
+            if (switched) {
+                broadcastToOps("Switched to branch " + branch, SUCCESS);
+            } else {
+                String plural = commits == 1 ? "" : "s";
+                broadcastToOps("Synced " + commits + " commit" + plural + " on branch " + branch, SUCCESS);
+            }
             broadcastChangedFiles(files);
         }
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "minecraft:reload");
@@ -252,9 +268,36 @@ public final class GitmcPlugin extends JavaPlugin {
                 .append(Component.text(line.substring(space), TEXT));
     }
 
+    private void handleBranches(CommandSender sender) {
+        if (repository == null) {
+            send(sender, "No repository is set in the config", ERROR);
+            return;
+        }
+        GitService git = new GitService(repository);
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            String current = git.currentBranch();
+            List<String> branches = git.branches();
+            sync(() -> {
+                send(sender, "Branches:", TEXT);
+                if (branches.isEmpty()) {
+                    sendRaw(sender, "none", HASH);
+                    return;
+                }
+                for (String name : branches) {
+                    if (name.equals(current)) {
+                        sendRaw(sender, name + " (current)", SUCCESS);
+                    } else {
+                        sendRaw(sender, name, TEXT);
+                    }
+                }
+            });
+        });
+    }
+
     private void sendHelp(CommandSender sender) {
         send(sender, "Commands:", TEXT);
         sendRaw(sender, "/git pull <branch> [-silent]: pull active or specified branch", TEXT);
+        sendRaw(sender, "/git branches: list branches", TEXT);
         sendRaw(sender, "/git version [#]: show recent commits", TEXT);
         sendRaw(sender, "/git help: show this list", TEXT);
     }
@@ -267,9 +310,6 @@ public final class GitmcPlugin extends JavaPlugin {
         }
         if (args.length == 1) {
             return filter(SUBCOMMANDS, args[0]);
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("pull")) {
-            return filter(List.of("-silent"), args[1]);
         }
         return List.of();
     }

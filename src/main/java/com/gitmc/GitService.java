@@ -7,7 +7,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Runs git against a single repo folder. Each call shells out to the git
@@ -83,5 +85,22 @@ final class GitService {
 
     List<String> changedFiles(String oldHead, String newHead) {
         return run("diff", "--name-status", oldHead + ".." + newHead).lines();
+    }
+
+    // Local branches followed by remote branches, deduped, origin/ stripped, no HEAD.
+    List<String> branches() {
+        Result result = run("for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin");
+        Set<String> names = new LinkedHashSet<>();
+        for (String line : result.lines()) {
+            String name = line.trim();
+            if (name.isEmpty() || name.equals("origin") || name.endsWith("/HEAD")) {
+                continue;
+            }
+            if (name.startsWith("origin/")) {
+                name = name.substring("origin/".length());
+            }
+            names.add(name);
+        }
+        return new ArrayList<>(names);
     }
 }
