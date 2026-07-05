@@ -182,7 +182,7 @@ public final class GitmcPlugin extends JavaPlugin {
             List<String> files, boolean silent) {
         if (!switched && commits == 0) {
             if (!silent) {
-                send(sender, "Already up to date on branch " + branch, INFO);
+                send(sender, "Already up to date on branch " + branch, SUCCESS);
             }
             return;
         }
@@ -247,7 +247,7 @@ public final class GitmcPlugin extends JavaPlugin {
                     return;
                 }
                 String plural = limit == 1 ? "" : "s";
-                send(sender, "Branch " + branch + ", latest commit" + plural + ":", TEXT);
+                send(sender, "Branch " + branch + ", latest commit" + plural + ":", INFO);
                 for (String line : log.lines()) {
                     if (!line.isBlank()) {
                         sendComponent(sender, commitLine(line));
@@ -278,7 +278,7 @@ public final class GitmcPlugin extends JavaPlugin {
             String current = git.currentBranch();
             List<String> branches = git.branches();
             sync(() -> {
-                send(sender, "Branches:", TEXT);
+                send(sender, "Branches:", INFO);
                 if (branches.isEmpty()) {
                     sendRaw(sender, "none", HASH);
                     return;
@@ -295,11 +295,16 @@ public final class GitmcPlugin extends JavaPlugin {
     }
 
     private void sendHelp(CommandSender sender) {
-        send(sender, "Commands:", TEXT);
-        sendRaw(sender, "/git pull <branch> [-silent]: pull active or specified branch", TEXT);
-        sendRaw(sender, "/git branches: list branches", TEXT);
-        sendRaw(sender, "/git version [#]: show recent commits", TEXT);
-        sendRaw(sender, "/git help: show this list", TEXT);
+        send(sender, "Commands:", INFO);
+        helpLine(sender, "/git pull [<branch>] [-silent]", "pull active or specified branch");
+        helpLine(sender, "/git branches", "list branches");
+        helpLine(sender, "/git version [<n>]", "show recent commits");
+        helpLine(sender, "/git help", "show this list");
+    }
+
+    // Command in white, its description in grey.
+    private void helpLine(CommandSender sender, String command, String description) {
+        sendComponent(sender, Component.text(command, TEXT).append(Component.text(": " + description, HASH)));
     }
 
     @Override
