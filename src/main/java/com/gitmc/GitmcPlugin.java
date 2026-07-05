@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -18,6 +19,14 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.jetbrains.annotations.NotNull;
 
 public final class GitmcPlugin extends JavaPlugin {
+
+    private static final String PREFIX = "[Git] ";
+
+    private static final TextColor INFO = TextColor.color(0xD29922); // GitHub attention
+    private static final TextColor SUCCESS = TextColor.color(0x3FB950); // GitHub success
+    private static final TextColor ERROR = TextColor.color(0xF85149); // GitHub danger
+    private static final TextColor TEXT = NamedTextColor.WHITE;
+    private static final TextColor HASH = NamedTextColor.GRAY;
 
     private static final Pattern VALID_BRANCH = Pattern.compile("^[A-Za-z0-9._/][A-Za-z0-9._/-]*$");
     private static final List<String> SUBCOMMANDS = List.of("pull", "version", "help");
@@ -62,12 +71,12 @@ public final class GitmcPlugin extends JavaPlugin {
 
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
-                             @NotNull String label, String @NotNull [] args) {
+            @NotNull String label, String @NotNull [] args) {
         if (!command.getName().equalsIgnoreCase("git")) {
             return false;
         }
         if (!sender.hasPermission("gitmc.use")) {
-            send(sender, "You do not have permission to use /git.", NamedTextColor.RED);
+            send(sender, "You do not have permission to use /git", ERROR);
             return true;
         }
         if (args.length == 0) {
@@ -79,7 +88,7 @@ public final class GitmcPlugin extends JavaPlugin {
             case "pull" -> handlePull(sender, args);
             case "version" -> handleVersion(sender, args);
             case "help" -> sendHelp(sender);
-            default -> send(sender, "Unknown subcommand. Try /git help.", NamedTextColor.RED);
+            default -> send(sender, "Unknown command, try /git help", ERROR);
         }
         return true;
     }
@@ -96,11 +105,11 @@ public final class GitmcPlugin extends JavaPlugin {
         }
 
         if (repository == null) {
-            send(sender, "No repository is set in the gitmc config.", NamedTextColor.RED);
+            send(sender, "No repository is set in the config", ERROR);
             return;
         }
         if (branch != null && !VALID_BRANCH.matcher(branch).matches()) {
-            send(sender, "Invalid branch name.", NamedTextColor.RED);
+            send(sender, "Failed to find branch " + branch, ERROR);
             return;
         }
         if (sender instanceof Player player && isOnCooldown(player, sender)) {
@@ -118,7 +127,7 @@ public final class GitmcPlugin extends JavaPlugin {
         Long last = lastPull.get(player.getUniqueId());
         if (last != null && now - last < cooldownMillis) {
             long wait = (cooldownMillis - (now - last) + 999) / 1000;
-            send(sender, "Please wait " + wait + "s before the next pull.", NamedTextColor.RED);
+            send(sender, "Please wait " + wait + "s before next sync", ERROR);
             return true;
         }
         lastPull.put(player.getUniqueId(), now);
@@ -128,30 +137,36 @@ public final class GitmcPlugin extends JavaPlugin {
     private void runPull(CommandSender sender, GitService git, String branch, boolean silent) {
         if (branch != null) {
             if (!git.branchExists(branch)) {
-                sync(() -> send(sender, "Branch " + branch + " was not found.", NamedTextColor.RED));
+                sync(() -> send(sender, "Failed to find branch " + branch, ERROR));
                 return;
             }
             GitService.Result checkout = git.run("checkout", branch);
             logLines("checkout", checkout);
             if (!checkout.ok()) {
-                sync(() -> send(sender, "Could not switch to branch " + branch + ". See console.", NamedTextColor.RED));
+                sync(() -> send(sender, "Failed to switch to branch " + branch + ", see console", ERROR));
                 return;
             }
         }
 
         String current = git.currentBranch();
         String oldHead = git.head();
+        if (!silent) {
+            sync(() -> send(sender, "Pulling " + current, INFO));
+        }
+
         GitService.Result pull = git.run("pull");
         logLines("pull", pull);
         if (!pull.ok()) {
-            sync(() -> send(sender, "Sync failed on branch " + current + ". See console.", NamedTextColor.RED));
+            sync(() -> send(sender, "Sync failed, see console", ERROR));
             return;
         }
 
         String newHead = git.head();
         int commits = git.commitCount(oldHead, newHead);
         if (commits == 0) {
-            sync(() -> send(sender, "Already up to date on branch " + current + ".", NamedTextColor.GREEN));
+            if (!silent) {
+                sync(() -> send(sender, "Already up to date on branch " + current, INFO));
+            }
             return;
         }
 
@@ -162,28 +177,34 @@ public final class GitmcPlugin extends JavaPlugin {
     private void applyPull(String branch, int commits, List<String> files, boolean silent) {
         if (!silent) {
             String plural = commits == 1 ? "" : "s";
-            broadcastToOps("Synced " + commits + " commit" + plural + " on branch " + branch + ".", NamedTextColor.GREEN);
+            broadcastToOps("Synced " + commits + " commit" + plural + " on branch " + branch, SUCCESS);
             broadcastChangedFiles(files);
         }
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "minecraft:reload");
         if (!silent) {
-            broadcastToOps("Reloaded.", NamedTextColor.GREEN);
+            broadcastToOps("Reloaded", SUCCESS);
         }
     }
 
     private void broadcastChangedFiles(List<String> files) {
-        int shown = Math.min(files.size(), MAX_CHANGED_FILES);
-        for (int i = 0; i < shown; i++) {
-            broadcastToOps("  " + files.get(i), NamedTextColor.GRAY);
-        }
-        if (files.size() > shown) {
-            broadcastToOps("  and " + (files.size() - shown) + " more", NamedTextColor.GRAY);
+        List<String> changes = files.stream().filter(line -> !line.isBlank()).toList();
+        int shown = 0;
+        for (String line : changes) {
+            if (shown >= MAX_CHANGED_FILES) {
+                broadcastToOps("and " + (changes.size() - shown) + " more", HASH);
+                break;
+            }
+            String[] parts = line.split("\t");
+            char status = parts[0].isEmpty() ? '?' : parts[0].charAt(0);
+            String fileName = parts[parts.length - 1];
+            broadcastFileToOps(status, fileName);
+            shown++;
         }
     }
 
     private void handleVersion(CommandSender sender, String[] args) {
         if (repository == null) {
-            send(sender, "No repository is set in the gitmc config.", NamedTextColor.RED);
+            send(sender, "No repository is set in the config", ERROR);
             return;
         }
 
@@ -192,7 +213,7 @@ public final class GitmcPlugin extends JavaPlugin {
             try {
                 count = Integer.parseInt(args[1]);
             } catch (NumberFormatException exception) {
-                send(sender, "Give a number of commits between 1 and 20.", NamedTextColor.RED);
+                send(sender, "Give a number of commits between 1 and 20", ERROR);
                 return;
             }
             count = Math.max(1, Math.min(20, count));
@@ -204,28 +225,43 @@ public final class GitmcPlugin extends JavaPlugin {
             String branch = git.currentBranch();
             GitService.Result log = git.run("log", "-n", String.valueOf(limit), "--pretty=%h %s (%cr)");
             sync(() -> {
-                send(sender, "Branch " + branch, NamedTextColor.AQUA);
-                if (log.lines().isEmpty()) {
-                    send(sender, "No commits found.", NamedTextColor.GRAY);
-                } else {
-                    for (String line : log.lines()) {
-                        send(sender, line, NamedTextColor.GRAY);
+                if (!log.ok()) {
+                    logLines("log", log);
+                    send(sender, "Could not read history, see console", ERROR);
+                    return;
+                }
+                String plural = limit == 1 ? "" : "s";
+                send(sender, "Branch " + branch + ", latest commit" + plural + ":", TEXT);
+                for (String line : log.lines()) {
+                    if (!line.isBlank()) {
+                        sendComponent(sender, commitLine(line));
                     }
                 }
             });
         });
     }
 
+    // A commit log line is "<hash> <subject> (<when>)". Show the hash in grey
+    // and the rest in white.
+    private Component commitLine(String line) {
+        int space = line.indexOf(' ');
+        if (space < 0) {
+            return Component.text(line, HASH);
+        }
+        return Component.text(line.substring(0, space), HASH)
+                .append(Component.text(line.substring(space), TEXT));
+    }
+
     private void sendHelp(CommandSender sender) {
-        send(sender, "gitmc commands:", NamedTextColor.GOLD);
-        send(sender, "/git pull [branch] [-silent]: pull the repo and reload", NamedTextColor.GRAY);
-        send(sender, "/git version [n]: show the branch and recent commits", NamedTextColor.GRAY);
-        send(sender, "/git help: show this help", NamedTextColor.GRAY);
+        send(sender, "Commands:", TEXT);
+        sendRaw(sender, "/git pull <branch> [-silent]: pull active or specified branch", TEXT);
+        sendRaw(sender, "/git version [#]: show recent commits", TEXT);
+        sendRaw(sender, "/git help: show this list", TEXT);
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
-                                      @NotNull String alias, String @NotNull [] args) {
+            @NotNull String alias, String @NotNull [] args) {
         if (!command.getName().equalsIgnoreCase("git")) {
             return List.of();
         }
@@ -249,8 +285,8 @@ public final class GitmcPlugin extends JavaPlugin {
         return matches;
     }
 
-    private void broadcastToOps(String text, NamedTextColor color) {
-        Component component = Component.text(text, color);
+    private void broadcastToOps(String text, TextColor color) {
+        Component component = Component.text(PREFIX + text, color);
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.isOp()) {
                 player.sendMessage(component);
@@ -259,8 +295,36 @@ public final class GitmcPlugin extends JavaPlugin {
         getLogger().info(text);
     }
 
-    private void send(CommandSender sender, String text, NamedTextColor color) {
+    private void broadcastFileToOps(char status, String fileName) {
+        Component component = Component.text(status + " ", statusColor(status))
+                .append(Component.text(fileName, TEXT));
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.isOp()) {
+                player.sendMessage(component);
+            }
+        }
+        getLogger().info(status + " " + fileName);
+    }
+
+    private void send(CommandSender sender, String text, TextColor color) {
+        sender.sendMessage(Component.text(PREFIX + text, color));
+    }
+
+    private void sendRaw(CommandSender sender, String text, TextColor color) {
         sender.sendMessage(Component.text(text, color));
+    }
+
+    private void sendComponent(CommandSender sender, Component component) {
+        sender.sendMessage(component);
+    }
+
+    private static TextColor statusColor(char status) {
+        return switch (status) {
+            case 'A' -> SUCCESS;
+            case 'M', 'R', 'C' -> INFO;
+            case 'D' -> ERROR;
+            default -> TEXT;
+        };
     }
 
     private void logLines(String label, GitService.Result result) {
