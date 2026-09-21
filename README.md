@@ -1,23 +1,22 @@
 # gitmc
 
-A small Paper plugin that pulls a git repo from in game and reloads the server.
-Handy for a datapack or resource pack you keep in git: push a change, then run
-`/git pull` in game to sync and reload without touching the console.
+Lightweight PaperMC plugin providing simple git cmds in-game to sync repos like datapacks.
+Push locally, `/git pull` on remote servers with in-game op perms, rather then the console
 
 ## Install
 
-1. Build the jar (see Build) or drop a released `gitmc-*.jar` into `plugins/`.
-2. Start the server once so it writes `plugins/gitmc/config.yml`.
-3. Set `repository` to the folder that holds the `.git` directory.
-4. Restart or run `/reload`.
+1. Build the jar or drop a released `gitmc-*.jar` into your server's `plugins/`.
+2. Restart the server to generate `config.yml`
+3. Set `repository` to the folder that holds the `.git` directory via the `config.yml`.
+4. Restart again to apply config.
 
 ## Config
 
 `plugins/gitmc/config.yml`:
 
 ```yaml
-# Path to the git repo to pull (the folder that contains .git).
-# Absolute, or relative to the server folder. Blank disables pulls.
+# Path to the git repo contain the .git
+# Blank disables
 repository: ""
 
 # Seconds a player must wait between /git pull commands.
@@ -42,4 +41,3 @@ Java 25 and the bundled Gradle wrapper:
 ./gradlew build
 ```
 
-The jar lands in `build/libs/`.
