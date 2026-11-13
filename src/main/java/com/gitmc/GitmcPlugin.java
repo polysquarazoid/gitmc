@@ -233,7 +233,8 @@ public final class GitmcPlugin extends JavaPlugin {
         int limit = count;
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             String branch = git.currentBranch();
-            GitService.Result log = git.run("log", "-n", String.valueOf(limit), "--pretty=%h %s (%cr)");
+            GitService.Result log = git.run("log", "-n", String.valueOf(limit),
+                    "--pretty=%an%x1f%s%x1f%ct");
             sync(() -> {
                 if (!log.ok()) {
                     logLines("log", log);
@@ -251,14 +252,57 @@ public final class GitmcPlugin extends JavaPlugin {
         });
     }
 
-    // Show the commit hash in grey and the rest in white.
+    // Show the author and age in grey, with the commit message in white.
     private Component commitLine(String line) {
-        int space = line.indexOf(' ');
-        if (space < 0) {
+        String[] parts = line.split("\u001f", 3);
+        if (parts.length < 3) {
             return Component.text(line, HASH);
         }
-        return Component.text(line.substring(0, space), HASH)
-                .append(Component.text(line.substring(space), TEXT));
+        long timestamp;
+        try {
+            timestamp = Long.parseLong(parts[2]);
+        } catch (NumberFormatException exception) {
+            return Component.text(line, HASH);
+        }
+        return Component.text(parts[0] + " ", HASH)
+                .append(Component.text(parts[1], TEXT))
+                .append(Component.text(" [" + commitAge(timestamp) + "]", HASH));
+    }
+
+    private String commitAge(long timestamp) {
+        long seconds = Math.max(0, System.currentTimeMillis() / 1000 - timestamp);
+        if (seconds < 10) {
+            return "now";
+        }
+        if (seconds < 60) {
+            return (seconds / 10 * 10) + "s ago";
+        }
+
+        long minutes = seconds / 60;
+        if (minutes < 60) {
+            return minutes + "m ago";
+        }
+
+        long hours = minutes / 60;
+        if (hours == 1) {
+            long remainingMinutes = minutes % 60;
+            return remainingMinutes == 0 ? "1h ago" : "1h " + remainingMinutes + "m ago";
+        }
+        if (hours < 24) {
+            return hours + "h ago";
+        }
+
+        long days = hours / 24;
+        if (days < 13) {
+            if (days == 1) {
+                long remainingHours = hours % 24;
+                return remainingHours == 0 ? "1d ago" : "1d " + remainingHours + "h ago";
+            }
+            return days + "d ago";
+        }
+
+        long weeks = days / 7;
+        return weeks + (weeks == 1 ? " week ago" : " weeks ago");
     }
 
     private void handleBranches(CommandSender sender) {

@@ -84,7 +84,8 @@ final class GitService {
         if (oldHead.isEmpty() || newHead.isEmpty()) {
             return List.of();
         }
-        return run("log", "--reverse", oldHead + ".." + newHead, "--pretty=%h %s (%cr)").lines();
+        return run("log", "--reverse", oldHead + ".." + newHead,
+                "--pretty=%an%x1f%s%x1f%ct").lines();
     }
 
     // List local and remote branches without duplicates or origin/HEAD.
