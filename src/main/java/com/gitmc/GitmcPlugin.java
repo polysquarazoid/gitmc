@@ -9,6 +9,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -333,15 +335,21 @@ public final class GitmcPlugin extends JavaPlugin {
 
     private void sendHelp(CommandSender sender) {
         send(sender, "Commands:", INFO);
-        helpLine(sender, "/git pull [<branch>] [-silent]", "pull a branch");
-        helpLine(sender, "/git branches", "list branches");
-        helpLine(sender, "/git version [<n>]", "show recent commits");
-        helpLine(sender, "/git help", "show this list");
+        helpLine(sender, "/git pull [<branch>] [-silent]", "pull a branch", "/git pull ", true);
+        helpLine(sender, "/git branches", "list branches", "/git branches", false);
+        helpLine(sender, "/git version [<n>]", "show recent commits", "/git version 10", false);
+        helpLine(sender, "/git help", "show this list", "/git help", false);
     }
 
-    // Show the command in white and its description in grey.
-    private void helpLine(CommandSender sender, String command, String description) {
-        sendComponent(sender, Component.text(command, TEXT).append(Component.text(": " + description, HASH)));
+    private void helpLine(CommandSender sender, String command, String description, String action,
+            boolean autofill) {
+        String tooltip = autofill ? "Click to autofill" : "Click to Run";
+        ClickEvent click = autofill ? ClickEvent.suggestCommand(action) : ClickEvent.runCommand(action);
+        Component line = Component.text(command, TEXT)
+                .append(Component.text(": " + description, HASH))
+                .clickEvent(click)
+                .hoverEvent(HoverEvent.showText(Component.text(tooltip, TEXT)));
+        sendComponent(sender, line);
     }
 
     @Override
