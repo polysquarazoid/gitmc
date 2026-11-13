@@ -88,6 +88,11 @@ final class GitService {
                 "--pretty=%an%x1f%s%x1f%ct").lines();
     }
 
+    List<String> latestCommit() {
+        Result result = run("log", "-n", "1", "--pretty=%an%x1f%s%x1f%ct");
+        return result.ok() ? result.lines() : List.of();
+    }
+
     // List local and remote branches without duplicates or origin/HEAD.
     List<String> branches() {
         Result result = run("for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin");

@@ -168,28 +168,26 @@ public final class GitmcPlugin extends JavaPlugin {
         String newHead = git.head();
         int commits = git.commitCount(oldHead, newHead);
         List<String> newCommits = git.commits(oldHead, newHead);
+        if (commits == 0) {
+            newCommits = git.latestCommit();
+        }
         boolean didSwitch = switched;
-        sync(() -> applyResult(sender, current, didSwitch, commits, newCommits, silent));
+        List<String> commitsToShow = newCommits;
+        sync(() -> applyResult(sender, current, didSwitch, commits, commitsToShow, silent));
     }
 
-    // Skip reloads when nothing changed. Reload after switches or new commits.
     private void applyResult(CommandSender sender, String branch, boolean switched, int commits,
-            List<String> newCommits, boolean silent) {
-        if (!switched && commits == 0) {
-            if (!silent) {
-                send(sender, "Already up to date on branch " + branch, SUCCESS);
-            }
-            return;
-        }
-
+            List<String> commitsToShow, boolean silent) {
         if (!silent) {
             if (switched) {
                 broadcastToOps("Switched to branch " + branch, SUCCESS);
-            } else {
+            } else if (commits > 0) {
                 String plural = commits == 1 ? "" : "s";
                 broadcastToOps("Synced " + commits + " commit" + plural + " on branch " + branch, SUCCESS);
+            } else {
+                broadcastToOps("Already up to date on branch " + branch, SUCCESS);
             }
-            broadcastCommits(newCommits);
+            broadcastCommits(commitsToShow, commits > 0);
         }
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "minecraft:reload");
         if (!silent) {
@@ -197,18 +195,20 @@ public final class GitmcPlugin extends JavaPlugin {
         }
     }
 
-    private void broadcastCommits(List<String> commits) {
+    private void broadcastCommits(List<String> commits, boolean added) {
         for (String line : commits) {
             if (line.isBlank()) {
                 continue;
             }
-            Component component = Component.text("+ ", SUCCESS).append(commitLine(line));
+            Component component = added
+                    ? Component.text("+ ", SUCCESS).append(commitLine(line))
+                    : commitLine(line);
             for (Player player : Bukkit.getOnlinePlayers()) {
                 if (player.isOp()) {
                     player.sendMessage(component);
                 }
             }
-            getLogger().info("+ " + line);
+            getLogger().info((added ? "+ " : "") + line);
         }
     }
 
