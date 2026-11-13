@@ -11,10 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * Runs git against a single repo folder. Each call shells out to the git
- * binary, so cached credentials and ssh keys work the same as on the console.
- */
+/** Runs git in the configured repository. */
 final class GitService {
 
     record Result(int exit, List<String> lines) {
@@ -90,7 +87,7 @@ final class GitService {
         return run("log", "--reverse", oldHead + ".." + newHead, "--pretty=%h %s (%cr)").lines();
     }
 
-    // Local branches followed by remote branches, deduped, origin/ stripped, no HEAD.
+    // List local and remote branches without duplicates or origin/HEAD.
     List<String> branches() {
         Result result = run("for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes/origin");
         Set<String> names = new LinkedHashSet<>();

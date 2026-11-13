@@ -1,41 +1,41 @@
 # gitmc
 
-Lightweight PaperMC plugin providing simple git cmds in-game to sync repos like datapacks.
-Push locally, `/git pull` on remote servers with in-game op perms, rather then the console
+A small Paper plugin for pulling Git repos in game. Handy for datapacks and resource packs.
+Push changes from your computer, then run `/git pull` on the server.
 
 ## Install
 
-1. Build the jar or drop a released `gitmc-*.jar` into your server's `plugins/`.
-2. Restart the server to generate `config.yml`
-3. Set `repository` to the folder that holds the `.git` directory via the `config.yml`.
-4. Restart again to apply config.
+1. Put `gitmc-*.jar` in the server's `plugins/` folder.
+2. Start the server to create `plugins/gitmc/config.yml`.
+3. Set `repository` to your Git repo folder.
+4. Restart the server.
 
 ## Config
 
 `plugins/gitmc/config.yml`:
 
 ```yaml
-# Path to the git repo contain the .git
-# Blank disables
+# Path to the Git repo. Leave blank to disable pulls.
 repository: ""
 
-# Seconds a player must wait between /git pull commands.
+# Wait time between pulls, in seconds.
 cooldown-seconds: 10
 ```
 
 ## Commands
 
-Needs the `gitmc.use` permission (default: op).
+Requires `gitmc.use` (ops by default).
 
-- `/git pull` pulls the current branch and reloads
-- `/git pull <branch>` switches to that branch and pulls it
-- `/git pull -silent` pulls without announcing to ops
-- `/git version [n]` shows the branch and the latest commit, or n commits (1 to 20)
-- `/git help` lists the commands
+- `/git pull` pulls the current branch and reloads.
+- `/git pull <branch>` switches branches, then pulls.
+- `/git pull -silent` pulls without notifying ops.
+- `/git version [n]` shows the latest commit, or the latest 1 to 20 commits.
+- `/git branches` lists available branches.
+- `/git help` lists commands.
 
 ## Build
 
-Java 25 and the bundled Gradle wrapper:
+Build with Java 25:
 
 ```bash
 ./gradlew build

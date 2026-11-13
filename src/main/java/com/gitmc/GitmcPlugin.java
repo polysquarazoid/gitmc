@@ -126,7 +126,7 @@ public final class GitmcPlugin extends JavaPlugin {
         Long last = lastPull.get(player.getUniqueId());
         if (last != null && now - last < cooldownMillis) {
             long wait = (cooldownMillis - (now - last) + 999) / 1000;
-            send(sender, "Please wait " + wait + "s before next sync", ERROR);
+            send(sender, "Wait " + wait + "s before pulling again", ERROR);
             return true;
         }
         lastPull.put(player.getUniqueId(), now);
@@ -134,8 +134,7 @@ public final class GitmcPlugin extends JavaPlugin {
     }
 
     private void runPull(CommandSender sender, GitService git, String branch, boolean silent) {
-        // Record where we start before any checkout, so a branch switch counts
-        // as a change and its diff is included below.
+        // Capture HEAD before checkout so branch switches include new commits.
         String startBranch = git.currentBranch();
         String oldHead = git.head();
 
@@ -148,7 +147,7 @@ public final class GitmcPlugin extends JavaPlugin {
             GitService.Result checkout = git.run("checkout", branch);
             logLines("checkout", checkout);
             if (!checkout.ok()) {
-                sync(() -> send(sender, "Failed to switch to branch " + branch + ", see console", ERROR));
+                sync(() -> send(sender, "Could not switch to " + branch + ". Check the console", ERROR));
                 return;
             }
             switched = !branch.equals(startBranch);
@@ -162,7 +161,7 @@ public final class GitmcPlugin extends JavaPlugin {
         GitService.Result pull = git.run("pull");
         logLines("pull", pull);
         if (!pull.ok()) {
-            sync(() -> send(sender, "Sync failed, see console", ERROR));
+            sync(() -> send(sender, "Pull failed. Check the console", ERROR));
             return;
         }
 
@@ -173,9 +172,7 @@ public final class GitmcPlugin extends JavaPlugin {
         sync(() -> applyResult(sender, current, didSwitch, commits, newCommits, silent));
     }
 
-    // A plain pull with nothing new just reports it and skips the reload. A
-    // branch switch, or a pull that brought in commits, lists the commits and
-    // always reloads so the running server matches the working tree.
+    // Skip reloads when nothing changed. Reload after switches or new commits.
     private void applyResult(CommandSender sender, String branch, boolean switched, int commits,
             List<String> newCommits, boolean silent) {
         if (!switched && commits == 0) {
@@ -226,7 +223,7 @@ public final class GitmcPlugin extends JavaPlugin {
             try {
                 count = Integer.parseInt(args[1]);
             } catch (NumberFormatException exception) {
-                send(sender, "Give a number of commits between 1 and 20", ERROR);
+                send(sender, "Enter a number from 1 to 20", ERROR);
                 return;
             }
             count = Math.max(1, Math.min(20, count));
@@ -240,7 +237,7 @@ public final class GitmcPlugin extends JavaPlugin {
             sync(() -> {
                 if (!log.ok()) {
                     logLines("log", log);
-                    send(sender, "Could not read history, see console", ERROR);
+                    send(sender, "Could not read commit history. Check the console", ERROR);
                     return;
                 }
                 String plural = limit == 1 ? "" : "s";
@@ -254,8 +251,7 @@ public final class GitmcPlugin extends JavaPlugin {
         });
     }
 
-    // A commit log line is "<hash> <subject> (<when>)". Show the hash in grey
-    // and the rest in white.
+    // Show the commit hash in grey and the rest in white.
     private Component commitLine(String line) {
         int space = line.indexOf(' ');
         if (space < 0) {
@@ -293,13 +289,13 @@ public final class GitmcPlugin extends JavaPlugin {
 
     private void sendHelp(CommandSender sender) {
         send(sender, "Commands:", INFO);
-        helpLine(sender, "/git pull [<branch>] [-silent]", "pull active or specified branch");
+        helpLine(sender, "/git pull [<branch>] [-silent]", "pull a branch");
         helpLine(sender, "/git branches", "list branches");
         helpLine(sender, "/git version [<n>]", "show recent commits");
         helpLine(sender, "/git help", "show this list");
     }
 
-    // Command in white, its description in grey.
+    // Show the command in white and its description in grey.
     private void helpLine(CommandSender sender, String command, String description) {
         sendComponent(sender, Component.text(command, TEXT).append(Component.text(": " + description, HASH)));
     }
