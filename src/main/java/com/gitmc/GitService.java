@@ -83,8 +83,11 @@ final class GitService {
         }
     }
 
-    List<String> changedFiles(String oldHead, String newHead) {
-        return run("diff", "--name-status", oldHead + ".." + newHead).lines();
+    List<String> commits(String oldHead, String newHead) {
+        if (oldHead.isEmpty() || newHead.isEmpty()) {
+            return List.of();
+        }
+        return run("log", "--reverse", oldHead + ".." + newHead, "--pretty=%h %s (%cr)").lines();
     }
 
     // Local branches followed by remote branches, deduped, origin/ stripped, no HEAD.

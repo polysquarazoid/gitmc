@@ -30,8 +30,6 @@ public final class GitmcPlugin extends JavaPlugin {
 
     private static final Pattern VALID_BRANCH = Pattern.compile("^[A-Za-z0-9._/][A-Za-z0-9._/-]*$");
     private static final List<String> SUBCOMMANDS = List.of("pull", "branches", "version", "help");
-    private static final int MAX_CHANGED_FILES = 10;
-
     private final Map<UUID, Long> lastPull = new ConcurrentHashMap<>();
 
     private File repository;
@@ -170,16 +168,16 @@ public final class GitmcPlugin extends JavaPlugin {
 
         String newHead = git.head();
         int commits = git.commitCount(oldHead, newHead);
-        List<String> files = git.changedFiles(oldHead, newHead);
+        List<String> newCommits = git.commits(oldHead, newHead);
         boolean didSwitch = switched;
-        sync(() -> applyResult(sender, current, didSwitch, commits, files, silent));
+        sync(() -> applyResult(sender, current, didSwitch, commits, newCommits, silent));
     }
 
     // A plain pull with nothing new just reports it and skips the reload. A
-    // branch switch, or a pull that brought in commits, lists the changes and
+    // branch switch, or a pull that brought in commits, lists the commits and
     // always reloads so the running server matches the working tree.
     private void applyResult(CommandSender sender, String branch, boolean switched, int commits,
-            List<String> files, boolean silent) {
+            List<String> newCommits, boolean silent) {
         if (!switched && commits == 0) {
             if (!silent) {
                 send(sender, "Already up to date on branch " + branch, SUCCESS);
@@ -194,7 +192,7 @@ public final class GitmcPlugin extends JavaPlugin {
                 String plural = commits == 1 ? "" : "s";
                 broadcastToOps("Synced " + commits + " commit" + plural + " on branch " + branch, SUCCESS);
             }
-            broadcastChangedFiles(files);
+            broadcastCommits(newCommits);
         }
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "minecraft:reload");
         if (!silent) {
@@ -202,19 +200,18 @@ public final class GitmcPlugin extends JavaPlugin {
         }
     }
 
-    private void broadcastChangedFiles(List<String> files) {
-        List<String> changes = files.stream().filter(line -> !line.isBlank()).toList();
-        int shown = 0;
-        for (String line : changes) {
-            if (shown >= MAX_CHANGED_FILES) {
-                broadcastToOps("and " + (changes.size() - shown) + " more", HASH);
-                break;
+    private void broadcastCommits(List<String> commits) {
+        for (String line : commits) {
+            if (line.isBlank()) {
+                continue;
             }
-            String[] parts = line.split("\t");
-            char status = parts[0].isEmpty() ? '?' : parts[0].charAt(0);
-            String fileName = parts[parts.length - 1];
-            broadcastFileToOps(status, fileName);
-            shown++;
+            Component component = Component.text("+ ", SUCCESS).append(commitLine(line));
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (player.isOp()) {
+                    player.sendMessage(component);
+                }
+            }
+            getLogger().info("+ " + line);
         }
     }
 
@@ -340,17 +337,6 @@ public final class GitmcPlugin extends JavaPlugin {
         getLogger().info(text);
     }
 
-    private void broadcastFileToOps(char status, String fileName) {
-        Component component = Component.text(status + " ", statusColor(status))
-                .append(Component.text(fileName, TEXT));
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.isOp()) {
-                player.sendMessage(component);
-            }
-        }
-        getLogger().info(status + " " + fileName);
-    }
-
     private void send(CommandSender sender, String text, TextColor color) {
         sender.sendMessage(Component.text(PREFIX + text, color));
     }
@@ -361,15 +347,6 @@ public final class GitmcPlugin extends JavaPlugin {
 
     private void sendComponent(CommandSender sender, Component component) {
         sender.sendMessage(component);
-    }
-
-    private static TextColor statusColor(char status) {
-        return switch (status) {
-            case 'A' -> SUCCESS;
-            case 'M', 'R', 'C' -> INFO;
-            case 'D' -> ERROR;
-            default -> TEXT;
-        };
     }
 
     private void logLines(String label, GitService.Result result) {
